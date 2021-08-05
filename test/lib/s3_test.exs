@@ -309,48 +309,53 @@ defmodule ExAws.S3Test do
 
   test "#presigned_url no opts" do
     {:ok, url} = S3.presigned_url(config(), :get, "bucket", "foo.txt")
-    assert_pre_signed_url(url, "https://s3.amazonaws.com/bucket/foo.txt", "3600")
+    assert_pre_signed_url(url, "https://s3.amazonaws.com/bucket/foo.txt", "3600", nil)
   end
 
   test "#presigned_url passing expires_in option" do
     {:ok, url} = S3.presigned_url(config(), :get, "bucket", "foo.txt", expires_in: 100)
-    assert_pre_signed_url(url, "https://s3.amazonaws.com/bucket/foo.txt", "100")
+    assert_pre_signed_url(url, "https://s3.amazonaws.com/bucket/foo.txt", "100", nil)
+  end
+
+  test "#presigned_url passing cache_for option" do
+    {:ok, url} = S3.presigned_url(config(), :get, "bucket", "foo.txt", cache_for: 1000)
+    assert_pre_signed_url(url, "https://s3.amazonaws.com/bucket/foo.txt", "3600", "1000")
   end
 
   test "#presigned_url passing virtual_host=false option" do
     {:ok, url} = S3.presigned_url(config(), :get, "bucket", "foo.txt", virtual_host: false)
-    assert_pre_signed_url(url, "https://s3.amazonaws.com/bucket/foo.txt", "3600")
+    assert_pre_signed_url(url, "https://s3.amazonaws.com/bucket/foo.txt", "3600", nil)
   end
 
   test "#presigned_url passing virtual_host=true option" do
     {:ok, url} = S3.presigned_url(config(), :get, "bucket", "foo.txt", virtual_host: true)
-    assert_pre_signed_url(url, "https://bucket.s3.amazonaws.com/foo.txt", "3600")
+    assert_pre_signed_url(url, "https://bucket.s3.amazonaws.com/foo.txt", "3600", nil)
   end
 
   test "#presigned_url passing both expires_in and virtual_host options" do
     opts = [expires_in: 100, virtual_host: true]
     {:ok, url} = S3.presigned_url(config(), :get, "bucket", "foo.txt", opts)
-    assert_pre_signed_url(url, "https://bucket.s3.amazonaws.com/foo.txt", "100")
+    assert_pre_signed_url(url, "https://bucket.s3.amazonaws.com/foo.txt", "100", nil)
   end
 
   test "#presigned_url passing s3_accelerate=false option" do
     {:ok, url} = S3.presigned_url(config(), :get, "bucket", "foo.txt", s3_accelerate: false)
-    assert_pre_signed_url(url, "https://s3.amazonaws.com/bucket/foo.txt", "3600")
+    assert_pre_signed_url(url, "https://s3.amazonaws.com/bucket/foo.txt", "3600", nil)
   end
 
   test "#presigned_url passing s3_accelerate=true option" do
     {:ok, url} = S3.presigned_url(config(), :get, "bucket", "foo.txt", s3_accelerate: true)
-    assert_pre_signed_url(url, "https://bucket.s3-accelerate.amazonaws.com/foo.txt", "3600")
+    assert_pre_signed_url(url, "https://bucket.s3-accelerate.amazonaws.com/foo.txt", "3600", nil)
   end
 
   test "#presigned_url passing both virtual_host and s3_accelerate options" do
     opts = [virtual_host: false, s3_accelerate: true]
     {:ok, url} = S3.presigned_url(config(), :get, "bucket", "foo.txt", opts)
-    assert_pre_signed_url(url, "https://bucket.s3-accelerate.amazonaws.com/foo.txt", "3600")
+    assert_pre_signed_url(url, "https://bucket.s3-accelerate.amazonaws.com/foo.txt", "3600", nil)
 
     opts = [virtual_host: true, s3_accelerate: false]
     {:ok, url} = S3.presigned_url(config(), :get, "bucket", "foo.txt", opts)
-    assert_pre_signed_url(url, "https://bucket.s3.amazonaws.com/foo.txt", "3600")
+    assert_pre_signed_url(url, "https://bucket.s3.amazonaws.com/foo.txt", "3600", nil)
   end
 
   test "#presigned_url passing query_params option" do
@@ -377,7 +382,7 @@ defmodule ExAws.S3Test do
 
   test "#presigned_url file is path with slash" do
     {:ok, url} = S3.presigned_url(config(), :get, "bucket", "/foo/bar.txt")
-    assert_pre_signed_url(url, "https://s3.amazonaws.com/bucket/foo/bar.txt", "3600")
+    assert_pre_signed_url(url, "https://s3.amazonaws.com/bucket/foo/bar.txt", "3600", nil)
   end
 
   test "#presigned_url file is key with query params" do
@@ -390,6 +395,7 @@ defmodule ExAws.S3Test do
       url,
       "https://s3.amazonaws.com/bucket/foo/bar.txt",
       "3600",
+      nil,
       query_params
     )
   end
@@ -397,7 +403,7 @@ defmodule ExAws.S3Test do
   test "#presigned_url file is key with embedded query params" do
     {:ok, url} = S3.presigned_url(config(), :get, "bucket", "/foo/bar.txt?d=400")
 
-    assert_pre_signed_url(url, "https://s3.amazonaws.com/bucket/foo/bar.txt", "3600", %{
+    assert_pre_signed_url(url, "https://s3.amazonaws.com/bucket/foo/bar.txt", "3600", nil, %{
       "d" => "400"
     })
   end
@@ -491,16 +497,19 @@ defmodule ExAws.S3Test do
           url,
           expected_scheme_host_path,
           expected_expire,
+          expected_cache_for,
           expected_query_params
         ) :: none()
         when url: binary,
              expected_scheme_host_path: binary,
              expected_expire: pos_integer(),
+             expected_cache_for: pos_integer(),
              expected_query_params: Access.t()
   defp assert_pre_signed_url(
          url,
          expected_scheme_host_path,
          expected_expire,
+         expected_cache_for,
          expected_query_params \\ []
        ) do
     uri = URI.parse(url)
@@ -510,7 +519,7 @@ defmodule ExAws.S3Test do
     assert %{
              "X-Amz-Algorithm" => "AWS4-HMAC-SHA256",
              "X-Amz-Credential" => _,
-             "X-Amz-Date" => _,
+             "X-Amz-Date" => datetime,
              "X-Amz-Expires" => expires,
              "X-Amz-SignedHeaders" => "host",
              "X-Amz-Signature" => _
@@ -518,9 +527,40 @@ defmodule ExAws.S3Test do
 
     assert expires == expected_expire
 
+    if expected_cache_for do
+      now = :calendar.universal_time() |> :calendar.datetime_to_gregorian_seconds()
+      header_datetime = to_datetime(datetime) |> :calendar.datetime_to_gregorian_seconds()
+
+      assert (now - header_datetime) |> :calendar.gregorian_seconds_to_datetime() > 0
+    end
+
     for {key, value} <- expected_query_params do
       assert headers[key] == value
     end
+  end
+
+  defp to_datetime(datetime) do
+    datetime = String.reverse(datetime)
+    "Z" <> time_date = datetime
+
+    date_time =
+      String.reverse(time_date)
+      |> String.split("T")
+      |> Enum.flat_map(fn x -> String.split(x, "", trim: true) end)
+
+    year = Enum.take(date_time, 4) |> Enum.join() |> String.to_integer()
+    date_time = Enum.drop(date_time, 4)
+    month = Enum.take(date_time, 2) |> Enum.join() |> String.to_integer()
+    date_time = Enum.drop(date_time, 2)
+    day = Enum.take(date_time, 2) |> Enum.join() |> String.to_integer()
+    date_time = Enum.drop(date_time, 2)
+    hours = Enum.take(date_time, 2) |> Enum.join() |> String.to_integer()
+    date_time = Enum.drop(date_time, 2)
+    minutes = Enum.take(date_time, 2) |> Enum.join() |> String.to_integer()
+    date_time = Enum.drop(date_time, 2)
+    secs = Enum.take(date_time, 2) |> Enum.join() |> String.to_integer()
+
+    {{year, month, day}, {hours, minutes, secs}}
   end
 
   defp config(), do: ExAws.Config.new(:s3, [])

@@ -40,6 +40,7 @@ defmodule ExAws.S3 do
 
   @type presigned_url_opts :: [
           {:expires_in, integer}
+          | {:cache_for, integer}
           | {:virtual_host, boolean}
           | {:s3_accelerate, boolean}
           | {:query_params, [{binary, binary}]}
@@ -1196,6 +1197,7 @@ defmodule ExAws.S3 do
   @one_week 60 * 60 * 24 * 7
   def presigned_url(config, http_method, bucket, object, opts \\ []) do
     expires_in = Keyword.get(opts, :expires_in, 3600)
+    cache_for = Keyword.get(opts, :cache_for)
     query_params = Keyword.get(opts, :query_params, [])
     virtual_host = Keyword.get(opts, :virtual_host, false)
     s3_accelerate = Keyword.get(opts, :s3_accelerate, false)
@@ -1212,7 +1214,14 @@ defmodule ExAws.S3 do
 
       false ->
         url = url_to_sign(bucket, object, config, virtual_host)
-        datetime = :calendar.universal_time()
+
+        datetime =
+          if cache_for do
+            ((:calendar.universal_time() |> :calendar.datetime_to_gregorian_seconds()) - cache_for)
+            |> :calendar.gregorian_seconds_to_datetime()
+          else
+            :calendar.universal_time()
+          end
 
         ExAws.Auth.presigned_url(
           http_method,
